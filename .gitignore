@@ -1,0 +1,23 @@
+# Ignore environment variables file
+.env
+
+# Ignore Node.js modules
+node_modules/
+
+# Ignore npm debug log
+npm-debug.log*
+
+# Ignore yarn debug log
+yarn-debug.log*
+yarn-error.log*
+
+# Ignore pnpm debug log
+pnpm-debug.log*
+
+# Ignore editor config files (optional)
+.vscode/
+.idea/
+
+# Ignore build/dist directories (if you add build steps later)
+dist/
+build/
