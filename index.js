@@ -1,24 +1,27 @@
-require('dotenv').config(); // โหลดค่าจากไฟล์ .env
+require('dotenv').config(); // Load environment variables from .env file
+
+// Import necessary modules
 const express = require('express');
 const axios = require('axios');
-const { Pool } = require('pg'); // ใช้ Pool เพื่อจัดการ Connection ได้ดีกว่า
+const { Pool } = require('pg'); // Use Pool for better connection management
 
+// Create an Express application instance
 const app = express();
 const port = process.env.PORT || 3000; // Use port from environment variable or default to 3000
 
-// Middleware เพื่อให้ Express สามารถอ่าน JSON จาก Request Body ได้
+// Middleware to parse JSON request bodies
 app.use(express.json());
 
-// --- ตั้งค่าการเชื่อมต่อฐานข้อมูล PostgreSQL ---
+// --- PostgreSQL Database Connection Setup ---
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
-  port: parseInt(process.env.DB_PORT || '5432', 10), // แปลง Port เป็นตัวเลข
+  port: parseInt(process.env.DB_PORT || '5432', 10), // Convert port to integer
 });
 
-// ทดสอบการเชื่อมต่อฐานข้อมูล (ไม่จำเป็นต้องทำทุกครั้ง แต่มีประโยชน์ในการ Debugging)
+// Database connection event listeners (optional but helpful for debugging)
 pool.on('connect', () => {
   console.log('Successfully connected to PostgreSQL database.');
 });
@@ -34,6 +37,7 @@ app.post('/fetch-and-save-report', async (req, res) => {
   // 1. Receive requirements from the web page (via Request Body JSON)
   // Expected JSON structure: { "reportName": "s_kpi_cvd_risk", "year": "2567", "province": "51" }
   const { reportName, year, province } = req.body; // Destructure from req.body
+  // Note: 'province' here is the 2-digit code used for API filtering
 
   // Validate required parameters
   if (!reportName || !year || !province) {
@@ -47,7 +51,7 @@ app.post('/fetch-and-save-report', async (req, res) => {
   const apiRequestBody = {
     tableName: reportName,
     year: year,
-    province: province,
+    province: province, // Use the 2-digit province code for the API request
     type: "json" // As specified in the jQuery code
     // Add any other parameters required by the API here
   };
@@ -128,16 +132,16 @@ app.post('/fetch-and-save-report', async (req, res) => {
 
       // *** สำคัญ: ปรับ array ของ values นี้ ให้ map จาก record ที่ได้จาก API ***
       // คุณต้องตรวจสอบชื่อ key ใน Object 'record' ที่ได้จาก API จริงๆ จาก console.log(record) ด้านบน
-      // ตัวอย่างนี้สมมติว่า key ใน API response ตรงกับชื่อคอลัมน์ในฐานข้อมูล (ยกเว้น b_year และ areacode)
+      // ตัวอย่างนี้สมมติว่า key ใน API response ตรงกับชื่อคอลัมน์ในฐานข้อมูล (ยกเว้น b_year)
       const values = [
-        record.id,         // สมมติว่า API response มี key ชื่อ 'id'
-        record.hospcode,   // สมมติว่า API response มี key ชื่อ 'hospcode'
-        record.areacode,   // สมมติว่า API response มี key ชื่อ 'areacode'
-        record.date_com,   // สมมติว่า API response มี key ชื่อ 'date_com'
-        year,              // ใช้ค่า year จาก Request Body สำหรับคอลัมน์ b_year
-        record.target,     // สมมติว่า API response มี key ชื่อ 'target'
-        record.result      // สมมติว่า API response มี key ชื่อ 'result'
-        // เพิ่มค่าอื่นๆ ที่ map จาก record หรือค่าคงที่ ถ้ามีคอลัมน์อื่นในตาราง
+        record.id,         // Assuming API response has a key named 'id'
+        record.hospcode,   // Assuming API response has a key named 'hospcode'
+        record.areacode,   // <<< ใช้ค่า areacode (8 หลัก) จาก API response สำหรับคอลัมน์ areacode
+        record.date_com,   // Assuming API response has a key named 'date_com'
+        year,              // Use the 'year' value from the Request Body for the 'b_year' column
+        record.target,     // Assuming API response has a key named 'target'
+        record.result      // Assuming API response has a key named 'result'
+        // Add values for any other columns in your table, mapping from 'record' or using constants
       ];
 
       try {
@@ -152,15 +156,15 @@ app.post('/fetch-and-save-report', async (req, res) => {
       }
     }
 
-    await client.query('COMMIT'); // ยืนยัน Transaction
+    await client.query('COMMIT'); // Commit the transaction if all inserts were attempted
 
-    console.log(`Insert ข้อมูลสำเร็จ ${insertCount} รายการ`);
-    res.status(200).send(`ดึงและบันทึกข้อมูลสำเร็จ ${insertCount} รายการ`);
+    console.log(`Successfully inserted ${insertCount} records.`);
+    res.status(200).send(`Successfully fetched and saved ${insertCount} records.`);
 
   } catch (error) {
-    console.error('เกิดข้อผิดพลาดโดยรวม:', error.message);
+    console.error('An overall error occurred:', error.message);
 
-    // ถ้าเกิดข้อผิดพลาดหลังจากเริ่ม Transaction ให้ Rollback
+    // If an error occurred after starting a transaction, rollback
     if (client) {
       try {
         await client.query('ROLLBACK');
