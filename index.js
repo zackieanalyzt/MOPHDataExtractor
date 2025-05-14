@@ -188,7 +188,7 @@ app.post('/fetch-and-save-report', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
   console.log(`Endpoint to fetch report: POST http://localhost:${port}/fetch-and-save-report`);
-  console.log(`Example Request Body (JSON): { "reportName": "s_kpi_cvd_risk", "year": "2567", "province": "51" }`);
+  console.log(`Example Request Body (JSON): { "reportName": "s_kpi_cvd_risk", "year": "2568", "province": "51" }`);
 });
 
 // Close the database pool when the Node.js process is terminated (e.g., Ctrl+C)
