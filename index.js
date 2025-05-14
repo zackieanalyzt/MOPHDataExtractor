@@ -1,28 +1,24 @@
-// Load environment variables from .env file
-require('dotenv').config();
-
-// Import necessary modules
+require('dotenv').config(); // โหลดค่าจากไฟล์ .env
 const express = require('express');
 const axios = require('axios');
-const { Pool } = require('pg'); // Use Pool for better connection management
+const { Pool } = require('pg'); // ใช้ Pool เพื่อจัดการ Connection ได้ดีกว่า
 
-// Create an Express application instance
 const app = express();
 const port = process.env.PORT || 3000; // Use port from environment variable or default to 3000
 
-// Middleware to parse JSON request bodies
+// Middleware เพื่อให้ Express สามารถอ่าน JSON จาก Request Body ได้
 app.use(express.json());
 
-// --- PostgreSQL Database Connection Setup ---
+// --- ตั้งค่าการเชื่อมต่อฐานข้อมูล PostgreSQL ---
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
-  port: parseInt(process.env.DB_PORT || '5432', 10), // Convert port to integer
+  port: parseInt(process.env.DB_PORT || '5432', 10), // แปลง Port เป็นตัวเลข
 });
 
-// Database connection event listeners (optional but helpful for debugging)
+// ทดสอบการเชื่อมต่อฐานข้อมูล (ไม่จำเป็นต้องทำทุกครั้ง แต่มีประโยชน์ในการ Debugging)
 pool.on('connect', () => {
   console.log('Successfully connected to PostgreSQL database.');
 });
@@ -59,7 +55,7 @@ app.post('/fetch-and-save-report', async (req, res) => {
   let client; // Declare client variable to be accessible in the finally block
 
   try {
-    console.log(`Fetching data from API: ${apiUrl} with Request Body: ${JSON.stringify(apiRequestBody)}`);
+    console.log(`กำลังดึงข้อมูลจาก API: ${apiUrl} พร้อม Request Body: ${JSON.stringify(apiRequestBody)}`);
 
     // 2. Fetch data from the Web Service using POST method
     const apiResponse = await axios.post(apiUrl, apiRequestBody, {
@@ -72,25 +68,37 @@ app.post('/fetch-and-save-report', async (req, res) => {
 
     // Check the API response status
     if (apiResponse.status !== 200) {
-      console.error('API returned an error status:', apiResponse.status, apiResponse.statusText);
+      console.error('API ตอบกลับด้วยสถานะผิดพลาด:', apiResponse.status, apiResponse.statusText);
+      // Log the response data from API if available for debugging
+      if (apiResponse.data) {
+          console.error('API Response Data:', apiResponse.data);
+      }
       return res.status(apiResponse.status).send(`Error fetching data from API: ${apiResponse.statusText}`);
     }
 
     const reportData = apiResponse.data; // Data received from the API
+    console.log('--- API Response Data Structure ---');
+    console.log(reportData); // <<< เพิ่ม console.log ตรงนี้เพื่อดูโครงสร้างข้อมูลทั้งหมด
+    console.log('-----------------------------------');
 
-    // *** IMPORTANT: You MUST inspect the actual structure of reportData from the API ***
-    // Use console.log(reportData) after a successful API call to see the structure.
-    // The array of records to insert might be under a key like 'data', 'records', etc.
-    // Example: Assuming reportData is an Object with a key named 'data' which is an Array of Objects
-    const recordsToInsert = reportData.data; // Adjust this based on the actual API response structure
+
+    // *** สำคัญ: คุณต้องตรวจสอบโครงสร้างของ reportData ที่ได้จาก API จริงๆ ***
+    // จาก console.log(reportData) ด้านบน ให้ดูว่า Array ของ Record ที่ต้องการ Insert อยู่ภายใต้ Key ชื่ออะไร
+    // ตัวอย่าง: สมมติว่า reportData เป็น Object ที่มี key ชื่อ 'data' ซึ่งเป็น Array ของ Object
+    const recordsToInsert = reportData.data; // <<< ปรับตรงนี้ให้ตรงกับโครงสร้างจริง
 
     // Check if data was received and is an array
     if (!recordsToInsert || !Array.isArray(recordsToInsert) || recordsToInsert.length === 0) {
-      console.log('No data received or received data is not an array from the specified API.');
-      return res.status(200).send('No data received or received data is not an array from the specified API.');
+      console.log('ไม่พบข้อมูล หรือข้อมูลที่ได้ไม่ใช่ Array จาก API ที่ระบุ');
+      // Log the type and length of recordsToInsert for debugging
+      console.log('Type of recordsToInsert:', typeof recordsToInsert);
+      if (Array.isArray(recordsToInsert)) {
+          console.log('Length of recordsToInsert:', recordsToInsert.length);
+      }
+      return res.status(200).send('ไม่พบข้อมูล หรือข้อมูลที่ได้ไม่ใช่ Array จาก API ที่ระบุ');
     }
 
-    console.log(`Fetched ${recordsToInsert.length} records.`);
+    console.log(`ดึงข้อมูลมาได้ ${recordsToInsert.length} รายการ`);
 
     // 3. Connect to the database and Insert data
     client = await pool.connect(); // Get a client from the pool
@@ -110,45 +118,49 @@ app.post('/fetch-and-save-report', async (req, res) => {
       -- target = EXCLUDED.target,
       -- result = EXCLUDED.result;
     `;
-    // *** IMPORTANT: Replace 'your_table_name' with the actual name of your PostgreSQL table ***
+    // *** สำคัญ: คุณต้องปรับแก้ 'your_table_name' ให้เป็นชื่อตารางในฐานข้อมูล PostgreSQL ของคุณ ***
 
     let insertCount = 0;
     for (const record of recordsToInsert) {
-      // *** IMPORTANT: Map values from the 'record' object (from API) to the values array ***
-      // You MUST inspect the actual key names in the 'record' object from the API response.
-      // Example: Assuming API keys match column names (except b_year)
+      console.log('--- Processing Record ---');
+      console.log(record); // <<< เพิ่ม console.log ตรงนี้เพื่อดูข้อมูลแต่ละ Record
+      console.log('-------------------------');
+
+      // *** สำคัญ: ปรับ array ของ values นี้ ให้ map จาก record ที่ได้จาก API ***
+      // คุณต้องตรวจสอบชื่อ key ใน Object 'record' ที่ได้จาก API จริงๆ จาก console.log(record) ด้านบน
+      // ตัวอย่างนี้สมมติว่า key ใน API response ตรงกับชื่อคอลัมน์ในฐานข้อมูล (ยกเว้น b_year และ areacode)
       const values = [
-        record.id,         // Assuming API response has a key named 'id'
-        record.hospcode,   // Assuming API response has a key named 'hospcode'
-        record.areacode,   // Assuming API response has a key named 'areacode'
-        record.date_com,   // Assuming API response has a key named 'date_com'
-        year,              // Use the 'year' value from the Request Body for the 'b_year' column
-        record.target,     // Assuming API response has a key named 'target'
-        record.result      // Assuming API response has a key named 'result'
-        // Add values for any other columns in your table, mapping from 'record' or using constants
+        record.id,         // สมมติว่า API response มี key ชื่อ 'id'
+        record.hospcode,   // สมมติว่า API response มี key ชื่อ 'hospcode'
+        record.areacode,   // สมมติว่า API response มี key ชื่อ 'areacode'
+        record.date_com,   // สมมติว่า API response มี key ชื่อ 'date_com'
+        year,              // ใช้ค่า year จาก Request Body สำหรับคอลัมน์ b_year
+        record.target,     // สมมติว่า API response มี key ชื่อ 'target'
+        record.result      // สมมติว่า API response มี key ชื่อ 'result'
+        // เพิ่มค่าอื่นๆ ที่ map จาก record หรือค่าคงที่ ถ้ามีคอลัมน์อื่นในตาราง
       ];
 
       try {
           await client.query(insertQuery, values);
           insertCount++;
       } catch (insertErr) {
-          console.error('Error inserting record:', insertErr.message, 'Record:', JSON.stringify(record));
-          // You can choose to rollback the entire transaction here, or just log and continue
-          // await client.query('ROLLBACK'); // Rollback all changes if any insert fails
-          // throw insertErr; // Re-throw the error to be caught by the outer catch block
-          // Or just log the error and continue inserting other records
+          console.error('ข้อผิดพลาดในการ Insert ข้อมูล:', insertErr.message, 'Record:', JSON.stringify(record));
+          // คุณอาจจะเลือกที่จะ Rollback ทั้งหมด หรือแค่ข้ามรายการที่ Insert ไม่ได้
+          // await client.query('ROLLBACK'); // ถ้าเลือก Rollback ทั้งหมดเมื่อมี Error
+          // throw insertErr; // โยน Error เพื่อให้ไปที่ catch ด้านนอก
+          // หรือแค่ log แล้วไปต่อ (ถ้าต้องการ Insert รายการอื่นๆ ที่เหลือ)
       }
     }
 
-    await client.query('COMMIT'); // Commit the transaction if all inserts were attempted
+    await client.query('COMMIT'); // ยืนยัน Transaction
 
-    console.log(`Successfully inserted ${insertCount} records.`);
-    res.status(200).send(`Successfully fetched and saved ${insertCount} records.`);
+    console.log(`Insert ข้อมูลสำเร็จ ${insertCount} รายการ`);
+    res.status(200).send(`ดึงและบันทึกข้อมูลสำเร็จ ${insertCount} รายการ`);
 
   } catch (error) {
-    console.error('An overall error occurred:', error.message);
+    console.error('เกิดข้อผิดพลาดโดยรวม:', error.message);
 
-    // If an error occurred after starting a transaction, rollback
+    // ถ้าเกิดข้อผิดพลาดหลังจากเริ่ม Transaction ให้ Rollback
     if (client) {
       try {
         await client.query('ROLLBACK');
